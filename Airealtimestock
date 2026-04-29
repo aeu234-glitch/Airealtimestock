@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+<title>📈 AI Stock Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=IBM+Plex+Sans:wght@300;400;600&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --bg: #080c16; --bg2: #111827; --bg3: #1a2235;
+    --border: #1e3a5f; --text: #e0e6f0; --muted: #6b7fa3;
+    --green: #00d4a0; --red: #ff4d6d; --blue: #60a0ff;
+    --yellow: #f0c040; --purple: #a070ff;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: 'IBM Plex Sans', sans-serif;
+    max-width: 480px; margin: 0 auto; min-height: 100vh;
+    padding-bottom: 80px;
+  }
+  header {
+    background: linear-gradient(180deg,#0d1628,var(--bg));
+    padding: 16px 16px 0; position: sticky; top: 0; z-index: 99;
+    backdrop-filter: blur(10px);
+  }
+  .header-title {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px; letter-spacing: 3px; color: var(--muted);
+    text-transform: uppercase; margin-bottom: 10px;
+  }
+  .ticker-scroll {
+    display: flex; gap: 8px; overflow-x: auto;
+    padding-bottom: 12px; scrollbar-width: none;
+  }
+  .ticker-scroll::-webkit-scrollbar { display: none; }
+  .ticker-btn {
+    flex-shrink: 0; padding: 6px 14px; border-radius: 20px;
+    border: 1px solid var(--border); background: transparent;
+    color: var(--muted); font-size: 12px; cursor: pointer;
+    font-family: 'IBM Plex Sans', sans-serif; white-space: nowrap;
+    transition: all 0.2s;
+  }
+  .ticker-btn.active {
+    border-color: var(--blue); background: rgba(96,160,255,0.15);
+    color: var(--blue);
+  }
+  .content { padding: 0 16px; }
+
+  /* Price Card */
+  .price-card {
+    background: linear-gradient(135deg,var(--bg2),var(--bg3));
+    border: 1px solid var(--border); border-radius: 16px;
+    padding: 20px; margin: 12px 0;
+  }
+  .price-top { display: flex; justify-content: space-between; align-items: flex-start; }
+  .stock-name { font-size: 13px; color: var(--muted); margin-bottom: 4px; }
+  .price-main {
+    font-family: 'Space Mono', monospace;
+    font-size: 34px; font-weight: 700; letter-spacing: -1px;
+  }
+  .price-change { font-size: 14px; margin-top: 4px; }
+  .signal-badge {
+    border-radius: 12px; padding: 10px 16px; text-align: center; min-width: 90px;
+  }
+  .signal-label { font-size: 9px; color: var(--muted); letter-spacing: 2px; margin-bottom: 4px; }
+  .signal-value {
+    font-family: 'Space Mono', monospace;
+    font-size: 14px; font-weight: 700;
+  }
+  .mini-stats {
+    display: grid; grid-template-columns: repeat(3,1fr);
+    gap: 8px; margin-top: 16px;
+  }
+  .mini-stat {
+    background: rgba(255,255,255,0.03); border-radius: 8px;
+    padding: 8px 10px; text-align: center;
+  }
+  .mini-stat-label {
+    font-size: 9px; color: var(--muted); letter-spacing: 2px; margin-bottom: 3px;
+  }
+  .mini-stat-value {
+    font-family: 'Space Mono', monospace; font-size: 15px; font-weight: 700;
+  }
+
+  /* Signal reasons */
+  .signal-card {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: 12px; padding: 12px; margin-bottom: 12px;
+  }
+  .card-title {
+    font-size: 9px; color: var(--muted); letter-spacing: 2px;
+    text-transform: uppercase; margin-bottom: 8px;
+  }
+  .reason-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 12px; }
+
+  /* Tabs */
+  .tabs {
+    display: grid; grid-template-columns: repeat(4,1fr);
+    gap: 4px; background: var(--bg2); border-radius: 12px;
+    padding: 4px; margin-bottom: 12px;
+  }
+  .tab-btn {
+    padding: 8px 4px; border-radius: 8px; border: none;
+    background: transparent; color: var(--muted);
+    font-size: 11px; font-family: inherit; cursor: pointer;
+    transition: all 0.2s;
+  }
+  .tab-btn.active { background: var(--border); color: var(--blue); }
+
+  /* Chart Card */
+  .chart-card {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: 12px; padding: 16px 12px; margin-bottom: 12px;
+  }
+  .chart-subtitle { font-size: 11px; color: var(--muted); margin-bottom: 10px; }
+  canvas { max-height: 220px; }
+
+  /* Period buttons */
+  .period-btns { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+  .period-btn {
+    padding: 5px 12px; border-radius: 8px; border: none;
+    background: var(--bg3); color: var(--muted);
+    font-size: 11px; font-family: inherit; cursor: pointer; transition: all 0.2s;
+  }
+  .period-btn.active { background: rgba(96,160,255,0.2); color: var(--blue); }
+
+  /* Pred days */
+  .pred-btns { display: flex; gap: 6px; margin-bottom: 10px; }
+  .pred-btn {
+    padding: 4px 10px; border-radius: 8px; border: none;
+    background: var(--bg3); color: var(--muted);
+    font-size: 11px; font-family: inherit; cursor: pointer;
+  }
+  .pred-btn.active { background: rgba(240,192,64,0.2); color: var(--yellow); }
+
+  /* Forecast box */
+  .forecast-box {
+    border-radius: 10px; padding: 12px 14px; margin-top: 10px;
+  }
+  .forecast-label { font-size: 10px; color: var(--muted); margin-bottom: 4px; }
+  .forecast-price {
+    font-family: 'Space Mono', monospace; font-size: 20px; font-weight: 700;
+  }
+  .forecast-trend { font-size: 12px; margin-top: 2px; }
+
+  /* Loading */
+  .loading {
+    display: flex; align-items: center; justify-content: center;
+    gap: 8px; padding: 40px; color: var(--muted); font-size: 13px;
+  }
+  .spinner {
+    width: 20px; height: 20px; border: 2px solid var(--border);
+    border-top-color: var(--blue); border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Live dot */
+  .live-dot {
+    display: inline-block; width: 7px; height: 7px;
+    background: var(--green); border-radius: 50%;
+    animation: pulse 1.5s ease-in-out infinite;
+    margin-right: 5px;
+  }
+  @keyframes pulse {
+    0%,100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(0.8); }
+  }
+
+  .up { color: var(--green); }
+  .down { color: var(--red); }
+  .disclaimer {
+    text-align: center; font-size: 10px; color: #3a4a63;
+    margin-top: 16px; padding: 0 16px;
+  }
+  .refresh-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 11px; color: var(--muted); margin-bottom: 8px;
+  }
+  .refresh-btn {
+    background: var(--bg3); border: 1px solid var(--border);
+    color: var(--blue); padding: 4px 10px; border-radius: 8px;
+    font-size: 11px; cursor: pointer; font-family: inherit;
+  }
+  .error-box {
+    background: rgba(255,77,109,0.1); border: 1px solid var(--red);
+    border-radius: 12px; padding: 16px; text-align: center;
+    font-size: 13px; color: var(--red); margin: 12px 0;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-title">📈 AI STOCK DASHBOARD — REAL-TIME สร้างขื้นโดย ซันดาวเนอร์</div>
+  <div class="ticker-scroll" id="tickerRow"></div>
+</header>
+
+<div class="content">
+  <div class="refresh-bar">
+    <span><span class="live-dot"></span> <span id="lastUpdate">กำลังโหลด...</span></span>
+    <button class="refresh-btn" onclick="fetchData()">🔄 รีเฟรช</button>
+  </div>
+
+  <div id="mainContent">
+    <div class="loading"><div class="spinner"></div> กำลังดึงข้อมูลจริง...</div>
+  </div>
+</div>
+
+<script>
+const STOCKS = {
+  AAPL:  { name:"Apple",     emoji:"🍎" },
+  GOOGL: { name:"Google",    emoji:"🔍" },
+  MSFT:  { name:"Microsoft", emoji:"🖥️" },
+  TSLA:  { name:"Tesla",     emoji:"⚡" },
+  NVDA:  { name:"NVIDIA",    emoji:"🤖" },
+  AMZN:  { name:"Amazon",    emoji:"📦" },
+  META:  { name:"Meta",      emoji:"📱" },
+};
+
+let currentTicker = "AAPL";
+let currentPeriod = "3mo";
+let currentTab    = "chart";
+let currentPred   = 7;
+let chartInstance = null;
+let allData       = [];
+let autoRefresh   = null;
+
+// ── Build ticker row ──────────────────────────────────
+const tickerRow = document.getElementById("tickerRow");
+Object.entries(STOCKS).forEach(([sym, info]) => {
+  const btn = document.createElement("button");
+  btn.className = "ticker-btn" + (sym === currentTicker ? " active" : "");
+  btn.textContent = `${info.emoji} ${sym}`;
+  btn.onclick = () => { currentTicker = sym; setActiveTicker(); fetchData(); };
+  btn.id = `tb_${sym}`;
+  tickerRow.appendChild(btn);
+});
+function setActiveTicker() {
+  document.querySelectorAll(".ticker-btn").forEach(b => b.classList.remove("active"));
+  document.getElementById(`tb_${currentTicker}`)?.classList.add("active");
+}
+
+// ── Fetch real data via Yahoo Finance (allorigins proxy) ──
+async function fetchData() {
+  document.getElementById("mainContent").innerHTML =
+    `<div class="loading"><div class="spinner"></div> กำลังดึงข้อมูล ${currentTicker}...</div>`;
+
+  const interval = currentPeriod === "1d" ? "5m" : currentPeriod === "5d" ? "15m" : "1d";
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${currentTicker}?range=${currentPeriod}&interval=${interval}&includePrePost=false`;
+  const proxy = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
+
+  try {
+    const res  = await fetch(proxy, { signal: AbortSignal.timeout(15000) });
+    const json = await res.json();
+    const raw  = JSON.parse(json.contents);
+
+    const result = raw?.chart?.result?.[0];
+    if (!result) throw new Error("ไม่พบข้อมูล");
+
+    const timestamps = result.timestamp;
+    const q          = result.indicators.quote[0];
+    const closes     = q.close;
+    const opens      = q.open;
+    const highs      = q.high;
+    const lows       = q.low;
+    const volumes    = q.volume;
+    const meta       = result.meta;
+
+    allData = timestamps.map((ts, i) => ({
+      date:   new Date(ts * 1000).toLocaleDateString("th-TH", { month:"short", day:"numeric" }),
+      close:  closes[i]  ? parseFloat(closes[i].toFixed(2))  : null,
+      open:   opens[i]   ? parseFloat(opens[i].toFixed(2))   : null,
+      high:   highs[i]   ? parseFloat(highs[i].toFixed(2))   : null,
+      low:    lows[i]    ? parseFloat(lows[i].toFixed(2))    : null,
+      volume: volumes[i] || 0,
+    })).filter(d => d.close !== null);
+
+    allData = calcIndicators(allData);
+
+    const price    = meta.regularMarketPrice || allData[allData.length-1].close;
+    const prevClose= meta.chartPreviousClose  || allData[allData.length-2]?.close || price;
+    const change   = price - prevClose;
+    const changePct= (change / prevClose * 100).toFixed(2);
+    const isUp     = change >= 0;
+    const high52   = meta.fiftyTwoWeekHigh || Math.max(...allData.map(d=>d.high||0));
+    const low52    = meta.fiftyTwoWeekLow  || Math.min(...allData.map(d=>d.low||999999));
+    const latest   = allData[allData.length - 1];
+    const signal   = getSignal(allData);
+    const preds    = mlPredict(allData, currentPred);
+
+    document.getElementById("lastUpdate").textContent =
+      `อัปเดต: ${new Date().toLocaleTimeString("th-TH")}`;
+
+    renderUI({ price, change, changePct, isUp, high52, low52, latest, signal, preds, meta });
+
+  } catch (err) {
+    console.error(err);
+    document.getElementById("mainContent").innerHTML = `
+      <div class="error-box">
+        ❌ ดึงข้อมูลไม่ได้<br>
+        <small style="color:var(--muted);font-size:11px">${err.message}</small><br><br>
+        <button class="refresh-btn" onclick="fetchData()">ลองใหม่</button>
+      </div>`;
+  }
+}
+
+// ── Indicators ────────────────────────────────────────
+function calcIndicators(data) {
+  return data.map((d, i, arr) => {
+    // RSI
+    let rsi = 50;
+    if (i >= 14) {
+      const diffs = arr.slice(i-13, i+1).map((x,j,a) => j===0 ? 0 : x.close - a[j-1].close);
+      const gains  = diffs.filter(v=>v>0).reduce((s,v)=>s+v,0)/14;
+      const losses = diffs.filter(v=>v<0).reduce((s,v)=>s+Math.abs(v),0)/14;
+      rsi = losses===0 ? 100 : parseFloat((100 - 100/(1+gains/losses)).toFixed(1));
+    }
+    // MA
+    const ma20 = i>=19 ? parseFloat((arr.slice(i-19,i+1).reduce((s,x)=>s+x.close,0)/20).toFixed(2)) : null;
+    const ma50 = i>=49 ? parseFloat((arr.slice(i-49,i+1).reduce((s,x)=>s+x.close,0)/50).toFixed(2)) : null;
+    // MACD
+    const ema = (span, idx) => {
+      const k = 2/(span+1); let e = arr[0].close;
+      for(let j=1;j<=idx;j++) e = arr[j].close*k + e*(1-k);
+      return e;
+    };
+    const macd   = i>=26 ? parseFloat((ema(12,i)-ema(26,i)).toFixed(3)) : 0;
+    const macdSig= i>=35 ? parseFloat((ema(9,i)*0.3).toFixed(3)) : 0;
+    return { ...d, rsi, ma20, ma50, macd, macdSignal: macdSig };
+  });
+}
+
+function getSignal(data) {
+  const l = data[data.length-1], p = data[data.length-2];
+  let score = 0; const reasons = [];
+  if (l.rsi < 30)      { score+=2; reasons.push({icon:"🟢", text:`RSI ${l.rsi} — Oversold (ซื้อมากไป)`}); }
+  else if (l.rsi > 70) { score-=2; reasons.push({icon:"🔴", text:`RSI ${l.rsi} — Overbought (ขายมากไป)`}); }
+  else                  { reasons.push({icon:"🟡", text:`RSI ${l.rsi} — Neutral`}); }
+  if (l.macd > l.macdSignal) { score+=1; reasons.push({icon:"🟢", text:"MACD Bullish Cross"}); }
+  else                        { score-=1; reasons.push({icon:"🔴", text:"MACD Bearish Cross"}); }
+  if (l.ma20 && l.ma50) {
+    if (l.close>l.ma20 && l.ma20>l.ma50)      { score+=2; reasons.push({icon:"🟢", text:"ราคา > MA20 > MA50 Uptrend"}); }
+    else if (l.close<l.ma20 && l.ma20<l.ma50) { score-=2; reasons.push({icon:"🔴", text:"ราคา < MA20 < MA50 Downtrend"}); }
+    else reasons.push({icon:"🟡", text:"MA Mixed"});
+  }
+  if (l.close > p.close) { score+=1; reasons.push({icon:"🟢", text:"ราคาวันนี้สูงกว่าเมื่อวาน"}); }
+  else                    { score-=1; reasons.push({icon:"🔴", text:"ราคาวันนี้ต่ำกว่าเมื่อวาน"}); }
+
+  if (score>=3) return { label:"BUY 🚀", color:"#00d4a0", bg:"rgba(0,212,160,0.12)", border:"#00d4a0", reasons };
+  if (score<=-3) return { label:"SELL 📉", color:"#ff4d6d", bg:"rgba(255,77,109,0.12)", border:"#ff4d6d", reasons };
+  return { label:"HOLD ⏸", color:"#f0c040", bg:"rgba(240,192,64,0.12)", border:"#f0c040", reasons };
+}
+
+function mlPredict(data, days=7) {
+  const closes = data.map(d=>d.close);
+  const n = closes.length;
+  const mx = (n-1)/2;
+  const my = closes.reduce((a,b)=>a+b,0)/n;
+  const num = closes.reduce((s,y,i)=>s+(i-mx)*(y-my),0);
+  const den = closes.reduce((s,_,i)=>s+(i-mx)**2,0);
+  const slope = num/den, intercept = my-slope*mx;
+  const preds = [];
+  for(let i=1;i<=days;i++) preds.push({ predicted: parseFloat((slope*(n+i-1)+intercept).toFixed(2)) });
+  return preds;
+}
+
+// ── Render UI ─────────────────────────────────────────
+function renderUI({ price, change, changePct, isUp, high52, low52, latest, signal, preds, meta }) {
+  const info = STOCKS[currentTicker];
+  const mc   = document.getElementById("mainContent");
+  mc.innerHTML = `
+    <!-- Price Card -->
+    <div class="price-card">
+      <div class="price-top">
+        <div>
+          <div class="stock-name">${info.emoji} ${info.name} (${currentTicker})</div>
+          <div class="price-main">$${parseFloat(price).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
+          <div class="price-change ${isUp?'up':'down'}">
+            ${isUp?"▲":"▼"} ${Math.abs(change).toFixed(2)} (${isUp?"+":""}${changePct}%)
+          </div>
+        </div>
+        <div class="signal-badge" style="background:${signal.bg};border:1px solid ${signal.border}">
+          <div class="signal-label">AI SIGNAL</div>
+          <div class="signal-value" style="color:${signal.color}">${signal.label}</div>
+        </div>
+      </div>
+      <div class="mini-stats">
+        <div class="mini-stat">
+          <div class="mini-stat-label">52W HIGH</div>
+          <div class="mini-stat-value">$${parseFloat(high52).toFixed(0)}</div>
+        </div>
+        <div class="mini-stat">
+          <div class="mini-stat-label">52W LOW</div>
+          <div class="mini-stat-value">$${parseFloat(low52).toFixed(0)}</div>
+        </div>
+        <div class="mini-stat">
+          <div class="mini-stat-label">RSI (14)</div>
+          <div class="mini-stat-value ${latest.rsi<30?'up':latest.rsi>70?'down':''}">${latest.rsi}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Signal Breakdown -->
+    <div class="signal-card">
+      <div class="card-title">Signal Breakdown</div>
+      ${signal.reasons.map(r=>`
+        <div class="reason-row">
+          <span>${r.icon}</span>
+          <span style="color:#c8d8f0">${r.text}</span>
+        </div>`).join("")}
+    </div>
+
+    <!-- Period Buttons -->
+    <div class="period-btns" id="periodBtns">
+      ${["1d","5d","1mo","3mo","6mo","1y"].map(p=>`
+        <button class="period-btn ${p===currentPeriod?'active':''}" onclick="changePeriod('${p}')">${p}</button>
+      `).join("")}
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs">
+      <button class="tab-btn ${currentTab==='chart'?'active':''}" onclick="changeTab('chart')">📈 กราฟ</button>
+      <button class="tab-btn ${currentTab==='rsi'?'active':''}"   onclick="changeTab('rsi')">RSI</button>
+      <button class="tab-btn ${currentTab==='macd'?'active':''}"  onclick="changeTab('macd')">MACD</button>
+      <button class="tab-btn ${currentTab==='pred'?'active':''}"  onclick="changeTab('pred')">🤖 AI</button>
+    </div>
+
+    <!-- Chart -->
+    <div class="chart-card" id="chartCard">
+      <div class="chart-subtitle" id="chartSubtitle"></div>
+      <div id="predBtns"></div>
+      <canvas id="mainChart"></canvas>
+      <div id="forecastBox"></div>
+    </div>
+
+    <!-- Volume -->
+    <div class="chart-card">
+      <div class="chart-subtitle">VOLUME (30 วันล่าสุด)</div>
+      <canvas id="volChart" style="max-height:80px"></canvas>
+    </div>
+
+    <div class="disclaimer">⚠️ ข้อมูลจาก Yahoo Finance · ไม่ใช่คำแนะนำการลงทุน</div>
+  `;
+
+  renderChart();
+  renderVolumeChart();
+}
+
+function renderChart() {
+  if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
+  const ctx   = document.getElementById("mainChart")?.getContext("2d");
+  if (!ctx) return;
+  const slice = allData.slice(-60);
+  const preds = mlPredict(allData, currentPred);
+  const sub   = document.getElementById("chartSubtitle");
+  const predDiv = document.getElementById("predBtns");
+  const fbox    = document.getElementById("forecastBox");
+
+  Chart.defaults.color = "#6b7fa3";
+  Chart.defaults.font.family = "'IBM Plex Sans', sans-serif";
+
+  if (currentTab === "chart") {
+    sub.textContent = "ราคาปิด + MA20 + MA50 (60 วันล่าสุด)";
+    predDiv.innerHTML = "";
+    fbox.innerHTML = "";
+    chartInstance = new Chart(ctx, {
+      type: "line",
+      data: {
+        labels: slice.map(d=>d.date),
+        datasets: [
+          { label:"ราคา", data:slice.map(d=>d.close), borderColor:"#60a0ff",
+            backgroundColor:"rgba(96,160,255,0.08)", fill:true,
+            borderWidth:2, pointRadius:0, tension:0.3 },
+          { label:"MA20", data:slice.map(d=>d.ma20), borderColor:"#f0c040",
+            borderWidth:1.5, pointRadius:0, borderDash:[5,3], tension:0.3 },
+          { label:"MA50", data:slice.map(d=>d.ma50), borderColor:"#a070ff",
+            borderWidth:1.5, pointRadius:0, borderDash:[5,3], tension:0.3 },
+        ]
+      },
+      options: chartOpts("$")
+    });
+
+  } else if (currentTab === "rsi") {
+    sub.textContent = "RSI (14) — เส้นแดง=70 เส้นเขียว=30";
+    predDiv.innerHTML = "";
+    fbox.innerHTML = "";
+    chartInstance = new Chart(ctx, {
+      type: "line",
+      data: {
+        labels: slice.map(d=>d.date),
+        datasets: [{
+          label:"RSI", data:slice.map(d=>d.rsi),
+          borderColor:"#a070ff", backgroundColor:"rgba(160,112,255,0.1)",
+          fill:true, borderWidth:2, pointRadius:0, tension:0.3
+        }]
+      },
+      options: {
+        ...chartOpts(""),
+        plugins: {
+          ...chartOpts("").plugins,
+          annotation: {},
+        },
+        scales: {
+          x: { grid:{color:"#1a2235"}, ticks:{maxTicksLimit:6} },
+          y: {
+            min:0, max:100, grid:{color:"#1a2235"},
+            afterDataLimits(scale){ scale.min=0; scale.max=100; }
+          }
+        }
+      }
+    });
+    // Draw RSI lines manually via plugin later - add reference lines
+    ctx.save();
+
+  } else if (currentTab === "macd") {
+    sub.textContent = "MACD — แท่งเขียว=bullish, แดง=bearish";
+    predDiv.innerHTML = "";
+    fbox.innerHTML = "";
+    const macdData = slice.map(d=>d.macd);
+    const colors   = macdData.map(v=>v>=0?"rgba(0,212,160,0.8)":"rgba(255,77,109,0.8)");
+    chartInstance = new Chart(ctx, {
+      type: "bar",
+      data: {
+        labels: slice.map(d=>d.date),
+        datasets: [
+          { label:"MACD", data:macdData, backgroundColor:colors, borderRadius:2 },
+          { label:"Signal", data:slice.map(d=>d.macdSignal),
+            type:"line", borderColor:"#f0c040", borderWidth:1.5, pointRadius:0, tension:0.3 }
+        ]
+      },
+      options: chartOpts("")
+    });
+
+  } else if (currentTab === "pred") {
+    sub.textContent = "🤖 AI ทำนายราคาล่วงหน้า (Linear Regression)";
+    predDiv.innerHTML = `<div class="pred-btns">
+      ${[5,7,14,21].map(d=>`
+        <button class="pred-btn ${d===currentPred?'active':''}" onclick="changePred(${d})">+${d}d</button>
+      `).join("")}
+    </div>`;
+
+    const histSlice = allData.slice(-20);
+    const predLabels = preds.map((_,i)=>`+${i+1}d`);
+    const predPrices = preds.map(p=>p.predicted);
+    const lastPrice  = allData[allData.length-1].close;
+    const predLast   = predPrices[predPrices.length-1];
+    const trend      = predLast > lastPrice;
+    const trendPct   = ((predLast-lastPrice)/lastPrice*100).toFixed(2);
+
+    fbox.innerHTML = `
+      <div class="forecast-box" style="background:${trend?"rgba(0,212,160,0.1)":"rgba(255,77,109,0.1)"};border:1px solid ${trend?"#00d4a0":"#ff4d6d"}">
+        <div class="forecast-label">AI FORECAST ${currentPred} วัน</div>
+        <div class="forecast-price" style="color:${trend?"#00d4a0":"#ff4d6d"}">$${predLast.toFixed(2)}</div>
+        <div class="forecast-trend" style="color:${trend?"#00d4a0":"#ff4d6d"}">
+          ${trend?"📈 แนวโน้มขาขึ้น":"📉 แนวโน้มขาลง"} (${trend?"+":""}${trendPct}%)
+        </div>
+      </div>`;
+
+    chartInstance = new Chart(ctx, {
+      type: "line",
+      data: {
+        labels: [...histSlice.map(d=>d.date), ...predLabels],
+        datasets: [
+          { label:"ราคาจริง",
+            data:[...histSlice.map(d=>d.close), ...new Array(preds.length).fill(null)],
+            borderColor:"#60a0ff", borderWidth:2, pointRadius:0, tension:0.3 },
+          { label:"AI คาดการณ์",
+            data:[...new Array(histSlice.length).fill(null), ...predPrices],
+            borderColor:"#f0c040", borderWidth:2, borderDash:[6,3],
+            pointRadius:4, pointBackgroundColor:"#f0c040", tension:0.3 }
+        ]
+      },
+      options: chartOpts("$")
+    });
+  }
+}
+
+function renderVolumeChart() {
+  const ctx = document.getElementById("volChart")?.getContext("2d");
+  if (!ctx) return;
+  const slice  = allData.slice(-30);
+  const colors = slice.map((d,i,a)=> i===0||d.close>=a[i-1].close ? "rgba(0,212,160,0.7)" : "rgba(255,77,109,0.7)");
+  new Chart(ctx, {
+    type:"bar",
+    data: {
+      labels: slice.map(d=>d.date),
+      datasets:[{ label:"Volume", data:slice.map(d=>d.volume), backgroundColor:colors, borderRadius:2 }]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false}, tooltip:{callbacks:{label:v=>`${(v.raw/1e6).toFixed(1)}M`}} },
+      scales:{
+        x:{ grid:{display:false}, ticks:{maxTicksLimit:4, font:{size:9}} },
+        y:{ grid:{color:"#1a2235"}, ticks:{callback:v=>`${(v/1e6).toFixed(0)}M`, font:{size:9}} }
+      }
+    }
+  });
+}
+
+function chartOpts(prefix="$") {
+  return {
+    responsive:true, maintainAspectRatio:false,
+    interaction:{ mode:"index", intersect:false },
+    plugins:{
+      legend:{ labels:{ boxWidth:12, font:{size:10} } },
+      tooltip:{
+        backgroundColor:"#111827", borderColor:"#1e3a5f", borderWidth:1,
+        callbacks:{ label: ctx => ` ${ctx.dataset.label}: ${prefix}${ctx.parsed.y?.toFixed(2)??ctx.parsed.y}` }
+      }
+    },
+    scales:{
+      x:{ grid:{color:"#1a2235"}, ticks:{maxTicksLimit:6, font:{size:9}} },
+      y:{ grid:{color:"#1a2235"}, ticks:{font:{size:9}, callback: v=>`${prefix}${v.toFixed(0)}`} }
+    }
+  };
+}
+
+function changePeriod(p) { currentPeriod = p; fetchData(); }
+function changeTab(t)    { currentTab = t;    renderChart(); document.querySelectorAll(".tab-btn").forEach(b=>b.classList.remove("active")); document.querySelectorAll(".tab-btn")[["chart","rsi","macd","pred"].indexOf(t)]?.classList.add("active"); }
+function changePred(d)   { currentPred = d;   renderChart(); }
+
+// ── Auto-refresh every 60s ─────────────────────────────
+fetchData();
+autoRefresh = setInterval(fetchData, 60000);
+</script>
+</body>
+</html>
